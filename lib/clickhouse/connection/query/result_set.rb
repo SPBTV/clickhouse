@@ -66,7 +66,7 @@ module Clickhouse
             parse_array_value value
           else
             raise NotImplementedError, "Cannot parse value of type #{type.inspect}"
-          end
+          end unless value.nil?
         end
 
         def parse_int_value(value)

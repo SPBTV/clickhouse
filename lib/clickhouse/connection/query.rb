@@ -44,12 +44,16 @@ module Clickhouse
         execute("DROP TABLE #{name}")
       end
 
-      def insert_rows(table, options = {})
-        options[:csv] ||= begin
-          options[:rows] ||= yield([])
-          generate_csv options[:rows], options[:names]
+      def insert_rows(table, csv: nil, names: nil, rows: nil, &block)
+        if csv
+          insert_csv table, csv
+        else
+          rows ||= [].tap(&block)
+          if (hashes = rows.first.is_a?(Hash))
+            names ||= rows.first.keys
+          end
+          insert_values table, names, hashes ? rows.map { |row| row.values_at(*names) } : rows
         end
-        execute("INSERT INTO #{table} FORMAT CSVWithNames", options[:csv])
       end
 
       def select_rows(options)
@@ -88,19 +92,28 @@ module Clickhouse
 
     private
 
-      def generate_csv(rows, names = nil)
-        hashes = rows[0].is_a?(Hash)
+      # @see https://clickhouse.yandex/docs/en/query_language/insert_into/
+      def insert_values(table, names, rows)
+        execute(
+          "INSERT INTO #{table}#{" (#{names.join(', ')})" if names} VALUES",
+          rows.map do |values|
+            "(#{values.map(&INSERT_VALUE_FORMATTER).join(', ')})"
+          end.join(', '),
+        )
+      end
 
-        if hashes
-          names ||= rows[0].keys
+      # @see https://clickhouse.yandex/docs/en/interfaces/formats/#values
+      INSERT_VALUE_FORMATTER = lambda do |value|
+        case value
+        when nil then 'NULL'
+        when Numeric then value.to_s
+        when Array then "[#{value.map(&INSERT_VALUE_FORMATTER).join(', ')}]"
+        else "'#{value.to_s.gsub(/['\\]/, '\\\\\0')}'"
         end
+      end
 
-        CSV.generate do |csv|
-          csv << names if names
-          rows.each do |row|
-            csv << (hashes ? row.values_at(*names) : row)
-          end
-        end
+      def insert_csv(table, csv)
+        execute("INSERT INTO #{table} FORMAT CSVWithNames", csv)
       end
 
       def inspect_value(value)

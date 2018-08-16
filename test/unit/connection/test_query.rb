@@ -125,31 +125,44 @@ ENGINE = MergeTree(date, 8192)
 
         describe "#insert_rows" do
           before do
-            @csv = <<-CSV
-              id,first_name,last_name
-              12345,Paul,Engel
-              67890,Bruce,Wayne
-            CSV
-            @csv.gsub!(/^\s+/, "")
+            @connection = Clickhouse.connect
+            @connection.drop_table 'logs' if @connection.tables.include?('logs')
+            @connection.create_table 'logs' do |t|
+              t.engine 'TinyLog'
+              t.uint32 :id
+              t.string :first_name
+              t.string :last_name
+              t.array :tags, 'String'
+              t.nullable :age, 'UInt8'
+            end
+            @rows = [[12345, 'Paul', 'Engel', []], [67890, 'Bruce', 'Wayne', []]]
+          end
+
+          describe "when values contain special characters" do
+            it 'correctly persists rows' do
+              rows = [[12345, "'", "\\", ['tag'], nil]]
+              assert_equal true, @connection.insert_rows("logs", rows: rows)
+              assert_equal rows, @connection.select_rows(from: :logs).to_a
+            end
           end
 
           describe "when using hashes" do
             it "sends a POST request containing a 'INSERT INTO' statement using CSV" do
-              @connection.expects(:post).with("INSERT INTO logs FORMAT CSVWithNames", @csv).returns("")
               assert_equal true, @connection.insert_rows("logs") { |rows|
-                rows << {:id => 12345, :first_name => "Paul", :last_name => "Engel"}
-                rows << {:id => 67890, :first_name => "Bruce", :last_name => "Wayne"}
+                rows << {:id => 12345, :first_name => "Paul", :last_name => "Engel", :tags => [], :age => nil}
+                rows << {:id => 67890, :first_name => "Bruce", :last_name => "Wayne", :tags => [], :age => nil}
               }
+              assert_equal @rows, @connection.select_rows(select: %i(id first_name last_name tags), from: :logs).to_a
             end
           end
 
           describe "when using arrays" do
             it "sends a POST request containing a 'INSERT INTO' statement using CSV" do
-              @connection.expects(:post).with("INSERT INTO logs FORMAT CSVWithNames", @csv).returns("")
-              assert_equal true, @connection.insert_rows("logs", :names => %w(id first_name last_name)) { |rows|
-                rows << [12345, "Paul", "Engel"]
-                rows << [67890, "Bruce", "Wayne"]
+              assert_equal true, @connection.insert_rows("logs", names: %w(id first_name last_name tags age)) { |rows|
+                rows << [12345, "Paul", "Engel", [], nil]
+                rows << [67890, "Bruce", "Wayne", [], nil]
               }
+              assert_equal @rows, @connection.select_rows(select: %i(id first_name last_name tags), from: :logs).to_a
             end
           end
         end

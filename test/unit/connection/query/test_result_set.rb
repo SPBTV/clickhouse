@@ -220,7 +220,7 @@ module Unit
             end
 
             it 'should parse as Integer' do
-              assert_equal [[0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1]],
+              assert_equal [[nil, nil, nil, nil, nil, nil, nil], [1, 1, 1, 1, 1, 1, 1]],
                            @result_set.to_a
             end
           end
@@ -244,8 +244,8 @@ module Unit
             end
 
             it 'should parse as Float' do
-              assert_equal ["0.0", "0.0", "1.0", "1.0"],
-                           @result_set.flatten.map(&:inspect)
+              assert_equal [[nil, nil], [1.0, 1.0]],
+                           @result_set.to_a
             end
           end
 
@@ -269,7 +269,7 @@ module Unit
             end
 
             it 'should parse as String' do
-              assert_equal [["", ""], ["", ""], ["text", "T"]],
+              assert_equal [[nil, nil], ["", ""], ["text", "T"]],
                            @result_set.to_a
             end
           end
